@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="color-scheme" content="dark" />
+  <title>HoodPlaka67 Image Enhancer</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <div class="eyebrow">HoodPlaka67 • Local Image Lab</div>
+      <h1>Image Enhancer</h1>
+      <p>Weiß korrigieren · Farben aufwerten · schärfen · hochskalieren · lokal exportieren</p>
+    </div>
+    <div class="privacy-badge">🔒 Dateien bleiben lokal im Browser</div>
+  </header>
+
+  <main class="app-shell">
+    <section class="panel upload-panel">
+      <div id="dropzone" class="dropzone" tabindex="0">
+        <input id="fileInput" type="file" multiple hidden
+          accept=".jpg,.jpeg,.png,.webp,.avif,.gif,.bmp,.tif,.tiff,.heic,.heif,.svg,.ico,image/*" />
+        <div class="drop-icon">＋</div>
+        <h2>Bilder hier ablegen</h2>
+        <p>oder Dateien auswählen • Mehrfach-Upload möglich</p>
+        <button id="pickFiles" class="primary">Dateien auswählen</button>
+        <small>JPG · PNG · WebP · AVIF · GIF · BMP · TIFF · HEIC/HEIF · SVG · ICO</small>
+      </div>
+      <div id="compatInfo" class="compat-info"></div>
+    </section>
+
+    <section class="workspace">
+      <aside class="panel jobs-panel">
+        <div class="section-title">
+          <h2>Jobs</h2>
+          <button id="clearJobs" class="ghost small">Leeren</button>
+        </div>
+        <div id="jobList" class="job-list">
+          <div class="empty-state">Noch keine Bilder geladen.</div>
+        </div>
+      </aside>
+
+      <section class="panel preview-panel">
+        <div class="preview-toolbar">
+          <div>
+            <strong id="currentName">Kein Bild ausgewählt</strong>
+            <span id="currentMeta"></span>
+          </div>
+          <div class="toolbar-actions">
+            <button class="ghost zoom-btn active" data-zoom="fit">Fit</button>
+            <button class="ghost zoom-btn" data-zoom="1">100%</button>
+            <button class="ghost zoom-btn" data-zoom="2">200%</button>
+          </div>
+        </div>
+
+        <div id="compareStage" class="compare-stage empty">
+          <div class="empty-preview">
+            <div class="big-icon">◐</div>
+            <p>Original und Ergebnis erscheinen hier.</p>
+          </div>
+          <div id="canvasScroller" class="canvas-scroller" hidden>
+            <div id="compareWrap" class="compare-wrap">
+              <canvas id="beforeCanvas"></canvas>
+              <div id="afterClip" class="after-clip">
+                <canvas id="afterCanvas"></canvas>
+              </div>
+              <div id="divider" class="divider"></div>
+            </div>
+          </div>
+        </div>
+        <input id="compareSlider" class="compare-slider" type="range" min="0" max="100" value="50" disabled />
+        <div class="compare-labels"><span>Original</span><span>Ergebnis</span></div>
+
+        <div class="status-row">
+          <div id="statusText">Bereit.</div>
+          <div id="progressBox" class="progress-box">
+            <div id="progressBar"></div>
+          </div>
+        </div>
+      </section>
+
+      <aside class="panel controls-panel">
+        <div class="preset-grid">
+          <button class="preset active" data-preset="customer">Auto Kundenfertig</button>
+          <button class="preset" data-preset="print">Print 300 DPI</button>
+          <button class="preset" data-preset="web">Web</button>
+          <button class="preset" data-preset="social">Social</button>
+          <button class="preset" data-preset="colors">Nur Farben</button>
+          <button class="preset" data-preset="upscale">Nur Upscale</button>
+          <button class="preset" data-preset="white">Nur Weiß/Farbstich</button>
+        </div>
+
+        <label>Modus
+          <select id="mode">
+            <option value="photo">Foto naturgetreu</option>
+            <option value="product">Produktfoto</option>
+            <option value="ai" selected>KI-Bild</option>
+            <option value="portrait">Portrait</option>
+            <option value="graphic">Grafik + Text</option>
+          </select>
+        </label>
+
+        <div class="control-group">
+          <h3>Farbe & Weiß</h3>
+          <label>Weißpunkt / Beige-Korrektur <output id="whiteStrengthOut">78</output>
+            <input id="whiteStrength" type="range" min="0" max="100" value="78" />
+          </label>
+          <label>Vibrance <output id="vibranceOut">24</output>
+            <input id="vibrance" type="range" min="-50" max="70" value="24" />
+          </label>
+          <label>Sättigung <output id="saturationOut">6</output>
+            <input id="saturation" type="range" min="-50" max="50" value="6" />
+          </label>
+          <label>Kontrast <output id="contrastOut">12</output>
+            <input id="contrast" type="range" min="-50" max="50" value="12" />
+          </label>
+          <label>Highlights <output id="highlightsOut">-4</output>
+            <input id="highlights" type="range" min="-50" max="50" value="-4" />
+          </label>
+          <label>Shadows <output id="shadowsOut">5</output>
+            <input id="shadows" type="range" min="-50" max="50" value="5" />
+          </label>
+          <label>Warm ↔ Kalt <output id="temperatureOut">-3</output>
+            <input id="temperature" type="range" min="-50" max="50" value="-3" />
+          </label>
+        </div>
+
+        <div class="control-group">
+          <h3>Detail</h3>
+          <label>Denoise <output id="denoiseOut">10</output>
+            <input id="denoise" type="range" min="0" max="60" value="10" />
+          </label>
+          <label>Schärfe <output id="sharpenOut">32</output>
+            <input id="sharpen" type="range" min="0" max="100" value="32" />
+          </label>
+          <label>Upscale
+            <select id="upscale">
+              <option value="1">1× Original</option>
+              <option value="2" selected>2×</option>
+              <option value="4">4×</option>
+              <option value="8">8×</option>
+            </select>
+          </label>
+          <label>Custom Zielbreite (px)
+            <input id="customWidth" type="number" min="0" step="1" value="0" />
+          </label>
+        </div>
+
+        <div class="control-group">
+          <h3>Module</h3>
+          <label class="switch-row"><span>Face Enhance</span><input id="faceEnhance" type="checkbox" /></label>
+          <label class="switch-row"><span>Hintergrund entfernen</span><input id="removeBg" type="checkbox" /></label>
+          <label id="bgModeRow">Hintergrund danach
+            <select id="bgMode">
+              <option value="transparent">Transparent</option>
+              <option value="white">Reines Weiß #FFFFFF</option>
+            </select>
+          </label>
+        </div>
+
+        <button id="runAuto" class="primary wide">✨ Auto Kundenfertig</button>
+        <button id="resetCurrent" class="ghost wide">Auf Original zurücksetzen</button>
+
+        <div class="analysis-card">
+          <h3>Analyse</h3>
+          <div id="analysisText">Noch keine Analyse.</div>
+        </div>
+
+        <div class="print-card">
+          <h3>Print 300 DPI</h3>
+          <div id="printInfo">—</div>
+        </div>
+      </aside>
+    </section>
+
+    <section class="panel export-panel">
+      <div>
+        <h2>Export</h2>
+        <p>Original bleibt separat erhalten. Transparenz wird bei passenden Formaten beibehalten.</p>
+      </div>
+      <div class="export-controls">
+        <label>Format
+          <select id="exportFormat">
+            <option value="png">PNG • verlustfrei</option>
+            <option value="tiff">TIFF • verlustfrei</option>
+            <option value="webp">WebP • Browser-Maxqualität</option>
+            <option value="jpeg">JPG • einstellbar</option>
+            <option value="avif">AVIF • wenn Browser unterstützt</option>
+          </select>
+        </label>
+        <label>JPG/WebP/AVIF Qualität
+          <input id="exportQuality" type="range" min="70" max="100" value="100" />
+        </label>
+        <button id="downloadOriginal" class="ghost">Original herunterladen</button>
+        <button id="exportCurrent" class="primary">Ergebnis exportieren</button>
+        <button id="exportZip" class="primary">Batch als ZIP</button>
+      </div>
+      <div id="exportNotice" class="notice"></div>
+    </section>
+
+    <section class="panel history-panel">
+      <div class="section-title"><h2>Session-Verlauf</h2></div>
+      <div id="historyList" class="history-list"><span>Noch keine Verarbeitung.</span></div>
+    </section>
+  </main>
+
+  <!-- Nur lokale Verarbeitung. Diese Bibliotheken liefern Decoder/ZIP-Funktionen; Bilddaten werden nicht hochgeladen. -->
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/utif@3.1.0/UTIF.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
