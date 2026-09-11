@@ -5,7 +5,7 @@ const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
 const state = {
   jobs: [], currentId: null, zoom: "fit", history: [],
-  safeMaxPixels: 70_000_000, safeMaxDimension: 16384
+  safeMaxPixels: 70_000_000, safeMaxDimension: 16384, processing: false
 };
 
 const els = {
@@ -15,7 +15,7 @@ const els = {
   compareWrap: $("#compareWrap"), before: $("#beforeCanvas"), after: $("#afterCanvas"),
   afterClip: $("#afterClip"), divider: $("#divider"), compareSlider: $("#compareSlider"),
   statusText: $("#statusText"), progressBar: $("#progressBar"), analysisText: $("#analysisText"),
-  printInfo: $("#printInfo"), runAuto: $("#runAuto"), resetCurrent: $("#resetCurrent"),
+  warningText: $("#warningText"), printInfo: $("#printInfo"), runAuto: $("#runAuto"), runBatch: $("#runBatch"), resetCurrent: $("#resetCurrent"),
   mode: $("#mode"), upscale: $("#upscale"), customWidth: $("#customWidth"),
   faceEnhance: $("#faceEnhance"), removeBg: $("#removeBg"), bgMode: $("#bgMode"),
   exportFormat: $("#exportFormat"), exportQuality: $("#exportQuality"),
@@ -35,7 +35,7 @@ const presets = {
   web:      {whiteStrength:66,vibrance:20,saturation:4,contrast:10,highlights:-3,shadows:4,temperature:-2,denoise:8,sharpen:25,upscale:"1"},
   social:   {whiteStrength:72,vibrance:28,saturation:8,contrast:14,highlights:-4,shadows:5,temperature:-2,denoise:8,sharpen:28,upscale:"2"},
   colors:   {whiteStrength:70,vibrance:26,saturation:5,contrast:10,highlights:-3,shadows:4,temperature:-3,denoise:0,sharpen:0,upscale:"1"},
-  upscale:  {whiteStrength:0,vibrance:0,saturation:0,contrast:0,highlights:0,shadows:0,temperature:0,denoise:0,sharpen:18,upscale:"4"},
+  upscale:  {whiteStrength:0,vibrance:0,saturation:0,contrast:0,highlights:0,shadows:0,temperature:0,denoise:0,sharpen:0,upscale:"4"},
   white:    {whiteStrength:92,vibrance:0,saturation:0,contrast:3,highlights:0,shadows:0,temperature:-4,denoise:0,sharpen:0,upscale:"1"}
 };
 
@@ -57,8 +57,36 @@ function clamp(v,min=0,max=255){ return v<min?min:v>max?max:v; }
 function sleep(){ return new Promise(r=>setTimeout(r,0)); }
 function setStatus(text,pct=0){ els.statusText.textContent=text; els.progressBar.style.width=`${clamp(pct,0,100)}%`; }
 function updateJobProgress(job,pct,status){ job.progress=pct; job.status=status; renderJobs(); }
+function addWarning(job,msg){ if(msg && !job.warnings.includes(msg)) job.warnings.push(msg); }
+function showWarnings(job){
+  if(!els.warningText) return;
+  els.warningText.textContent = job?.warnings?.length ? `Hinweise:\n${job.warnings.map(x=>"• "+x).join("\n")}` : "";
+}
+function canColorProcess(s){
+  return [s.whiteStrength,s.vibrance,s.saturation,s.contrast,s.highlights,s.shadows,s.temperature].some(v=>Math.abs(Number(v)||0)>0.001);
+}
+function tunedSettings(raw){
+  const p={
+    photo:{white:.90,vib:.85,sat:.80,contrast:.90,denoise:1.00,sharpen:.90,skin:1.15},
+    product:{white:1.12,vib:1.05,sat:.90,contrast:1.08,denoise:.75,sharpen:1.08,skin:1.00},
+    ai:{white:1.00,vib:1.00,sat:1.00,contrast:1.00,denoise:1.00,sharpen:1.00,skin:1.00},
+    portrait:{white:.82,vib:.72,sat:.65,contrast:.82,denoise:1.12,sharpen:.68,skin:1.45},
+    graphic:{white:1.08,vib:.90,sat:.78,contrast:1.15,denoise:.35,sharpen:1.25,skin:.80}
+  }[raw.mode] || {white:1,vib:1,sat:1,contrast:1,denoise:1,sharpen:1,skin:1};
+  const s={...raw};
+  s.whiteStrength=clamp(raw.whiteStrength*p.white,0,100);
+  s.vibrance=clamp(raw.vibrance*p.vib,-50,70);
+  s.saturation=clamp(raw.saturation*p.sat,-50,50);
+  s.contrast=clamp(raw.contrast*p.contrast,-50,50);
+  s.denoise=clamp(raw.denoise*p.denoise,0,60);
+  s.sharpen=clamp(raw.sharpen*p.sharpen,0,100);
+  s.skinProtect=p.skin;
+  return s;
+}
 
 function compatibility(){
+  const mem=Number(navigator.deviceMemory||8);
+  state.safeMaxPixels = mem<=4 ? 36_000_000 : mem<=6 ? 50_000_000 : 70_000_000;
   const parts = [
     `OffscreenCanvas: ${"OffscreenCanvas" in window ? "ja":"nein"}`,
     `FaceDetector: ${"FaceDetector" in window ? "ja":"nein"}`,
@@ -71,13 +99,15 @@ function compatibility(){
 window.addEventListener("load", compatibility);
 
 els.pickFiles.onclick=()=>els.fileInput.click();
-els.fileInput.onchange=(e)=>addFiles([...e.target.files]);
+els.fileInput.onchange=async(e)=>{await addFiles([...e.target.files]); e.target.value="";};
 ["dragenter","dragover"].forEach(ev=>els.dropzone.addEventListener(ev,e=>{e.preventDefault();els.dropzone.classList.add("drag")}));
 ["dragleave","drop"].forEach(ev=>els.dropzone.addEventListener(ev,e=>{e.preventDefault();els.dropzone.classList.remove("drag")}));
 els.dropzone.addEventListener("drop",e=>addFiles([...e.dataTransfer.files]));
 els.dropzone.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();els.fileInput.click()}});
 
 async function addFiles(files){
+  files = files.filter(f=>f && f.size>0);
+  if(!files.length){ setStatus("Keine gültigen Dateien ausgewählt.",0); return; }
   for(const file of files){
     const job={id:uid(),file,name:file.name,size:file.size,type:file.type||"unbekannt",status:"geladen",progress:0,decoded:null,originalCanvas:null,resultCanvas:null,analysis:null,warnings:[],created:new Date()};
     state.jobs.push(job);
@@ -90,31 +120,42 @@ function renderJobs(){
   if(!state.jobs.length){els.jobList.innerHTML='<div class="empty-state">Noch keine Bilder geladen.</div>';return}
   els.jobList.innerHTML="";
   for(const j of state.jobs){
-    const d=document.createElement("div"); d.className="job-item"+(j.id===state.currentId?" active":"");
-    d.innerHTML=`<strong title="${escapeHtml(j.name)}">${escapeHtml(j.name)}</strong><span>${fmtBytes(j.size)} • ${escapeHtml(j.status)}</span><div class="job-progress"><i style="width:${j.progress||0}%"></i></div>`;
+    const d=document.createElement("div"); d.className="job-item"+(j.id===state.currentId?" active":""); d.dataset.id=j.id;
+    d.innerHTML=`<strong title="${escapeHtml(j.name)}">${escapeHtml(j.name)}</strong><span>${fmtBytes(j.size)} • ${escapeHtml(j.status)}${j.warnings.length?` • <b class="warn">${j.warnings.length} Hinweis${j.warnings.length>1?"e":""}</b>`:""}</span><div class="job-progress"><i style="width:${j.progress||0}%"></i></div>`;
     d.onclick=()=>selectJob(j.id); els.jobList.appendChild(d);
   }
 }
 function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
+
+async function ensureDecoded(job){
+  if(job.originalCanvas) return job.originalCanvas;
+  setStatus("Original wird dekodiert …",5); updateJobProgress(job,5,"dekodieren");
+  const decoded=await decodeFile(job.file);
+  try{
+    if(!decoded.width || !decoded.height) throw new Error("Bild hat keine gültige Pixelgröße.");
+    if(decoded.width>state.safeMaxDimension || decoded.height>state.safeMaxDimension)
+      throw new Error(`Bildkante ${decoded.width}×${decoded.height}px überschreitet das sichere Browser-Limit von ${state.safeMaxDimension}px.`);
+    const c=document.createElement("canvas"); c.width=decoded.width; c.height=decoded.height;
+    const ctx=c.getContext("2d",{willReadFrequently:true});
+    if(!ctx) throw new Error("Der Browser konnte keinen 2D-Bildspeicher anlegen.");
+    ctx.drawImage(decoded.source,0,0);
+    job.originalCanvas=c; updateJobProgress(job,10,"bereit");
+    const ext=(job.name.split(".").pop()||"").toLowerCase();
+    if(ext==="gif") addWarning(job,"Animierte GIFs werden als erster Frame verarbeitet; das Original bleibt unverändert erhalten.");
+    return c;
+  } finally { if(decoded.cleanup) decoded.cleanup(); }
+}
 
 async function selectJob(id){
   state.currentId=id; renderJobs();
   const job=currentJob(); if(!job) return;
   els.currentName.textContent=job.name; els.currentMeta.textContent=`${fmtBytes(job.size)} • ${job.type}`;
   try{
-    if(!job.originalCanvas){
-      setStatus("Original wird dekodiert …",5); updateJobProgress(job,5,"dekodieren");
-      const decoded=await decodeFile(job.file);
-      job.decoded=decoded;
-      const c=document.createElement("canvas"); c.width=decoded.width; c.height=decoded.height;
-      c.getContext("2d",{willReadFrequently:true}).drawImage(decoded.source,0,0);
-      job.originalCanvas=c; updateJobProgress(job,10,"bereit");
-      if(decoded.cleanup) decoded.cleanup();
-    }
-    drawComparison(job); analyzeAndShow(job);
+    await ensureDecoded(job);
+    drawComparison(job); analyzeAndShow(job); showWarnings(job);
   }catch(err){
-    job.status="Fehler"; job.warnings.push(err.message); updateJobProgress(job,0,"Fehler");
-    setStatus(`Fehler: ${err.message}`,0); els.analysisText.textContent=err.message;
+    job.status="Fehler"; addWarning(job,err.message); updateJobProgress(job,0,"Fehler");
+    setStatus(`Fehler: ${err.message}`,0); els.analysisText.textContent=err.message; showWarnings(job);
   }
 }
 
@@ -191,27 +232,30 @@ async function analyzeAndShow(job){
     `Schwarzpunkt: ${a.blackPoint} • Weißpunkt-Luma: ${a.whiteLuma}`;
 }
 function analyzeCanvas(canvas){
-  const ctx=canvas.getContext("2d",{willReadFrequently:true}), w=canvas.width,h=canvas.height;
-  const data=ctx.getImageData(0,0,w,h).data;
-  const pixels=w*h, step=Math.max(1,Math.floor(Math.sqrt(pixels/220000)));
-  const hist=new Uint32Array(256); let count=0,sum=0,sum2=0,wr=0,wg=0,wb=0,wc=0,warm=0,neutralBright=0;
-  for(let y=0;y<h;y+=step)for(let x=0;x<w;x+=step){
-    const i=(y*w+x)*4;if(data[i+3]<16)continue;
-    const r=data[i],g=data[i+1],b=data[i+2], mx=Math.max(r,g,b),mn=Math.min(r,g,b);
+  const ow=canvas.width,oh=canvas.height;
+  const scale=Math.min(1,1024/Math.max(ow,oh),Math.sqrt(900000/(ow*oh)));
+  const w=Math.max(1,Math.round(ow*scale)),h=Math.max(1,Math.round(oh*scale));
+  const sample=document.createElement("canvas"); sample.width=w; sample.height=h;
+  const sctx=sample.getContext("2d",{willReadFrequently:true});
+  sctx.imageSmoothingEnabled=true; sctx.imageSmoothingQuality="high"; sctx.drawImage(canvas,0,0,w,h);
+  const data=sctx.getImageData(0,0,w,h).data;
+  const hist=new Uint32Array(256); let count=0,sum=0,sum2=0,wr=0,wg=0,wb=0,wc=0,warm=0;
+  for(let i=0;i<data.length;i+=4){
+    if(data[i+3]<16)continue;
+    const r=data[i],g=data[i+1],b=data[i+2],mx=Math.max(r,g,b),mn=Math.min(r,g,b);
     const l=Math.round(.2126*r+.7152*g+.0722*b); hist[l]++;count++;sum+=l;sum2+=l*l;
     const chrom=(mx-mn)/255;
-    if(l>180&&chrom<.22){wr+=r;wg+=g;wb+=b;wc++; if(r>b+5||g>b+6)warm++; if(chrom<.08)neutralBright++}
+    if(l>180&&chrom<.22){wr+=r;wg+=g;wb+=b;wc++; if(r>b+5||g>b+6)warm++;}
   }
   const avg=sum/Math.max(1,count),sd=Math.sqrt(Math.max(0,sum2/Math.max(1,count)-avg*avg));
-  const percentile=(p)=>{let t=count*p,s=0;for(let i=0;i<256;i++){s+=hist[i];if(s>=t)return i}return p<.5?0:255};
+  const percentile=(p)=>{let t=count*p,acc=0;for(let i=0;i<256;i++){acc+=hist[i];if(acc>=t)return i}return p<.5?0:255};
   const bp=percentile(.01),wl=percentile(.995),wp=wc?[wr/wc,wg/wc,wb/wc]:[wl,wl,wl];
   const castR=wp[0]-wp[2],castG=wp[1]-wp[2];
   let castLabel="neutral"; if(castR>8||castG>8)castLabel="warm / gelblich"; else if(castR<-8)castLabel="kühl / cyan"; else if(wp[1]>wp[0]+8)castLabel="grünlich"; else if(wp[0]>wp[1]+10)castLabel="magenta/rot";
-  return {width:w,height:h,blackPoint:bp,whiteLuma:wl,whitePoint:wp,
+  return {width:ow,height:oh,blackPoint:bp,whiteLuma:wl,whitePoint:wp,
     exposureLabel:avg<85?"dunkel":avg>185?"hell":"ausgewogen",
     contrastLabel:sd<38?"flach":sd>72?"hoch":"normal",castLabel,
-    beigeRisk:wc>20 && warm/Math.max(1,wc)>.45 && wp[2]<245, avgLuma:avg, sd
-  };
+    beigeRisk:wc>20 && warm/Math.max(1,wc)>.45 && wp[2]<245, avgLuma:avg, sd};
 }
 
 function readSettings(){
@@ -222,101 +266,107 @@ function readSettings(){
 }
 
 els.runAuto.onclick=()=>processCurrent();
-async function processCurrent(){
-  const job=currentJob(); if(!job?.originalCanvas){setStatus("Bitte zuerst ein Bild laden.",0);return}
-  const s=readSettings();
+els.runBatch.onclick=()=>processAll();
+
+async function processJob(job,rawSettings,{redraw=true}={}){
+  const s=tunedSettings(rawSettings);
+  job.warnings=[];
   try{
-    updateJobProgress(job,12,"Analyse"); setStatus("Bildanalyse …",12); await sleep();
-    job.analysis=analyzeCanvas(job.originalCanvas); analyzeAndShow(job);
-
+    await ensureDecoded(job);
+    updateJobProgress(job,12,"Analyse"); setStatus(`Analyse: ${job.name}`,12); await sleep();
+    job.analysis=analyzeCanvas(job.originalCanvas);
     let c=cloneCanvas(job.originalCanvas);
-    updateJobProgress(job,24,"Farbkorrektur");setStatus("Weißpunkt, Levels und Farben …",24);
-    c=applyColorPipeline(c,job.analysis,s);await sleep();
 
-    if(s.removeBg){
-      updateJobProgress(job,36,"Hintergrund");setStatus("Hintergrund wird analysiert …",36);
-      c=removeEdgeBackground(c,s.bgMode);await sleep();
+    if(canColorProcess(s)){
+      updateJobProgress(job,24,"Farbkorrektur"); setStatus(`Farbe/Weiß: ${job.name}`,24);
+      c=applyColorPipeline(c,job.analysis,s); await sleep();
     }
+    if(s.removeBg){ updateJobProgress(job,36,"Hintergrund"); setStatus(`Hintergrund: ${job.name}`,36); c=removeEdgeBackground(c,s.bgMode); await sleep(); }
+    if(s.denoise>0){ updateJobProgress(job,48,"Denoise"); setStatus(`Denoise: ${job.name}`,48); c=applyDenoise(c,s.denoise); await sleep(); }
+    if(s.sharpen>0){ updateJobProgress(job,62,"Schärfen"); setStatus(`Schärfen: ${job.name}`,62); c=applySharpen(c,s.sharpen); await sleep(); }
+    if(s.faceEnhance){ updateJobProgress(job,70,"Face Enhance"); setStatus(`Face Enhance: ${job.name}`,70); c=await applyFaceEnhance(c,job); await sleep(); }
+    updateJobProgress(job,78,"Upscale"); setStatus(`Upscale: ${job.name}`,78); c=await upscaleCanvas(c,s,job);
 
-    if(s.denoise>0){
-      updateJobProgress(job,48,"Denoise");setStatus("Rauschen reduzieren …",48);
-      c=applyDenoise(c,s.denoise);await sleep();
-    }
-
-    if(s.sharpen>0){
-      updateJobProgress(job,62,"Schärfen");setStatus("Kanten und Textur schärfen …",62);
-      c=applySharpen(c,s.sharpen);await sleep();
-    }
-
-    if(s.faceEnhance){
-      updateJobProgress(job,70,"Face Enhance");setStatus("Gesichter prüfen …",70);
-      c=await applyFaceEnhance(c,job);await sleep();
-    }
-
-    updateJobProgress(job,78,"Upscale");setStatus("Auflösung hochskalieren …",78);
-    c=await upscaleCanvas(c,s,job);
-
-    job.resultCanvas=c; job.status="fertig"; job.progress=100;
-    drawComparison(job); renderJobs(); setStatus("Fertig – kundenfertige Vorschau erstellt.",100);
-    addHistory(job,s);
+    job.resultCanvas=c; job.status="fertig"; job.progress=100; addHistory(job,s);
+    if(redraw && job.id===state.currentId){ drawComparison(job); analyzeAndShow(job); showWarnings(job); }
+    renderJobs(); return true;
   }catch(err){
-    job.status="Fehler";job.warnings.push(err.message);renderJobs();setStatus(`Fehler: ${err.message}`,0);
+    job.status="Fehler"; job.progress=0; addWarning(job,err.message); renderJobs();
+    if(job.id===state.currentId) showWarnings(job);
+    setStatus(`Fehler bei ${job.name}: ${err.message}`,0); return false;
   }
+}
+
+async function processCurrent(){
+  if(state.processing) return;
+  const job=currentJob(); if(!job){setStatus("Bitte zuerst ein Bild laden.",0);return}
+  state.processing=true; els.runAuto.disabled=true; els.runBatch.disabled=true;
+  try{ const ok=await processJob(job,readSettings()); if(ok)setStatus("Fertig – kundenfertige Vorschau erstellt.",100); }
+  finally{state.processing=false;els.runAuto.disabled=false;els.runBatch.disabled=false;}
+}
+
+async function processAll(){
+  if(state.processing) return;
+  if(!state.jobs.length){setStatus("Bitte zuerst Bilder laden.",0);return}
+  state.processing=true; els.runAuto.disabled=true; els.runBatch.disabled=true;
+  const settings=readSettings(), startId=state.currentId; let ok=0;
+  try{
+    for(let i=0;i<state.jobs.length;i++){
+      const job=state.jobs[i]; state.currentId=job.id; renderJobs();
+      setStatus(`Batch ${i+1}/${state.jobs.length}: ${job.name}`,Math.round(i/state.jobs.length*100));
+      if(await processJob(job,settings,{redraw:false})) ok++;
+      await sleep();
+    }
+    state.currentId=startId && state.jobs.some(j=>j.id===startId) ? startId : state.jobs[0]?.id;
+    if(state.currentId) await selectJob(state.currentId);
+    setStatus(`Batch fertig: ${ok}/${state.jobs.length} Bilder verarbeitet.`, ok===state.jobs.length?100:90);
+  }finally{state.processing=false;els.runAuto.disabled=false;els.runBatch.disabled=false;}
 }
 
 function cloneCanvas(src){const c=document.createElement("canvas");c.width=src.width;c.height=src.height;c.getContext("2d").drawImage(src,0,0);return c}
 
-function applyColorPipeline(canvas,a,s){
-  const ctx=canvas.getContext("2d",{willReadFrequently:true}),img=ctx.getImageData(0,0,canvas.width,canvas.height),d=img.data;
-  const bp=Math.max(0,a.blackPoint-2),wp=Math.max(bp+16,a.whiteLuma);
-  const whiteTarget=252;
+function transformColorData(d,a,s){
+  const bp=Math.max(0,a.blackPoint-2),wp=Math.max(bp+16,a.whiteLuma),whiteTarget=252;
   const gainRaw=[whiteTarget/Math.max(1,a.whitePoint[0]),whiteTarget/Math.max(1,a.whitePoint[1]),whiteTarget/Math.max(1,a.whitePoint[2])];
-  const ws=s.whiteStrength/100, contrast=1+s.contrast/100;
-  const temp=s.temperature/100, vib=s.vibrance/100,satAdj=s.saturation/100;
+  const ws=s.whiteStrength/100, contrast=1+s.contrast/100, temp=s.temperature/100, vib=s.vibrance/100,satAdj=s.saturation/100;
+  const levelsStrength=Math.min(1,ws*.62+Math.abs(s.contrast)/100*.45);
   for(let i=0;i<d.length;i+=4){
     if(d[i+3]===0)continue;
-    let r=d[i],g=d[i+1],b=d[i+2];
-    const origR=r,origG=g,origB=b;
-    r=(r-bp)*255/(wp-bp);g=(g-bp)*255/(wp-bp);b=(b-bp)*255/(wp-bp);
-    const max0=Math.max(origR,origG,origB),min0=Math.min(origR,origG,origB), l0=(origR+origG+origB)/3;
+    let r=d[i],g=d[i+1],b=d[i+2]; const origR=r,origG=g,origB=b;
+    const nr=(r-bp)*255/(wp-bp),ng=(g-bp)*255/(wp-bp),nb=(b-bp)*255/(wp-bp);
+    r=r+(nr-r)*levelsStrength; g=g+(ng-g)*levelsStrength; b=b+(nb-b)*levelsStrength;
+    const max0=Math.max(origR,origG,origB),min0=Math.min(origR,origG,origB);
     const skin=origR>95&&origG>40&&origB>20&&(max0-min0)>15&&origR>origG&&origR>origB&&Math.abs(origR-origG)>10;
-    const castStrength=ws*(skin?.25:1);
+    const skinGuard=skin?Math.min(.38,.25/Math.max(.6,s.skinProtect||1)) : 1;
+    const castStrength=ws*skinGuard;
     r*=1+(gainRaw[0]-1)*castStrength;g*=1+(gainRaw[1]-1)*castStrength;b*=1+(gainRaw[2]-1)*castStrength;
-
-    // Lokale Off-White-Neutralisierung: greift vor allem in hellen, relativ wenig gesättigten Flächen.
     let mx=Math.max(r,g,b),mn=Math.min(r,g,b),ch=(mx-mn)/255,lum=(r+g+b)/765;
     const nearWhite=Math.max(0,Math.min(1,(lum-.66)/.28))*Math.max(0,Math.min(1,(.22-ch)/.18));
-    const warmBias=Math.max(0,((r+b? r-b:0)+(g-b)*.75)/80);
-    const neutralWeight=nearWhite*ws*Math.min(1,.35+warmBias)*(skin?.12:1);
+    const warmBias=Math.max(0,((r-b)+(g-b)*.75)/80);
+    const neutralWeight=nearWhite*ws*Math.min(1,.35+warmBias)*(skin?0.10:1);
     if(neutralWeight>0){
       const neutral=Math.min(255,(r+g+b)/3 + (255-(r+g+b)/3)*.22*ws);
-      r=r*(1-neutralWeight)+neutral*neutralWeight;
-      g=g*(1-neutralWeight)+neutral*neutralWeight;
-      b=b*(1-neutralWeight)+neutral*neutralWeight;
+      r=r*(1-neutralWeight)+neutral*neutralWeight;g=g*(1-neutralWeight)+neutral*neutralWeight;b=b*(1-neutralWeight)+neutral*neutralWeight;
     }
-
-    // Temperatur
     r*=1+temp*.10;b*=1-temp*.12;g*=1-temp*.015;
-
-    // Highlights / Shadows luma-gewichtet
     lum=(.2126*r+.7152*g+.0722*b)/255;
-    const sh=(s.shadows/100)*(1-lum)*(1-lum)*45;
-    const hi=(s.highlights/100)*lum*lum*45;
+    const sh=(s.shadows/100)*(1-lum)*(1-lum)*45, hi=(s.highlights/100)*lum*lum*45;
     r+=sh+hi;g+=sh+hi;b+=sh+hi;
-
-    // Kontrast
     r=(r-127.5)*contrast+127.5;g=(g-127.5)*contrast+127.5;b=(b-127.5)*contrast+127.5;
-
-    // Vibrance + Saturation; Haut wird geschont
-    const avg=(r+g+b)/3; mx=Math.max(r,g,b);mn=Math.min(r,g,b);
-    const currentSat=(mx-mn)/Math.max(1,mx);
-    const vibBoost=vib*(1-currentSat)*(skin?.25:1);
-    const totalSat=1+vibBoost+satAdj*(skin?.35:1);
+    const avg=(r+g+b)/3;mx=Math.max(r,g,b);mn=Math.min(r,g,b);const currentSat=(mx-mn)/Math.max(1,mx);
+    const protect=skin?Math.min(.45,.30/Math.max(.7,s.skinProtect||1)):1;
+    const totalSat=1+vib*(1-currentSat)*protect+satAdj*protect;
     r=avg+(r-avg)*totalSat;g=avg+(g-avg)*totalSat;b=avg+(b-avg)*totalSat;
-
     d[i]=clamp(r);d[i+1]=clamp(g);d[i+2]=clamp(b);
   }
-  ctx.putImageData(img,0,0);return canvas;
+}
+function applyColorPipeline(canvas,a,s){
+  const ctx=canvas.getContext("2d",{willReadFrequently:true}),tile=1024;
+  for(let y=0;y<canvas.height;y+=tile)for(let x=0;x<canvas.width;x+=tile){
+    const w=Math.min(tile,canvas.width-x),h=Math.min(tile,canvas.height-y),img=ctx.getImageData(x,y,w,h);
+    transformColorData(img.data,a,s);ctx.putImageData(img,x,y);
+  }
+  return canvas;
 }
 
 function applyDenoise(canvas,strength){
@@ -327,26 +377,25 @@ function applyDenoise(canvas,strength){
 }
 
 function applySharpen(canvas,strength){
-  const w=canvas.width,h=canvas.height;
+  const w=canvas.width,h=canvas.height,tile=1024;
   if(w*h>55_000_000 && strength>55) strength=55;
-  const ctx=canvas.getContext("2d",{willReadFrequently:true}),src=ctx.getImageData(0,0,w,h),out=new ImageData(w,h);
-  out.data.set(src.data);const s=src.data,d=out.data,amt=(strength/100)*1.25;
-  for(let y=1;y<h-1;y++){
-    let i=(y*w+1)*4;
-    for(let x=1;x<w-1;x++,i+=4){
-      if(s[i+3]===0)continue;
-      const up=i-w*4,down=i+w*4,left=i-4,right=i+4;
-      for(let c=0;c<3;c++){
-        const blur=(s[up+c]+s[down+c]+s[left+c]+s[right+c]+s[i+c]*4)/8;
-        d[i+c]=clamp(s[i+c]+(s[i+c]-blur)*amt);
-      }
+  const amt=(strength/100)*1.25;
+  const source=cloneCanvas(canvas),sctx=source.getContext("2d",{willReadFrequently:true}),ctx=canvas.getContext("2d",{willReadFrequently:true});
+  for(let ty=0;ty<h;ty+=tile)for(let tx=0;tx<w;tx+=tile){
+    const sx=Math.max(0,tx-1),sy=Math.max(0,ty-1),ex=Math.min(w,tx+tile+1),ey=Math.min(h,ty+tile+1),tw=ex-sx,th=ey-sy;
+    const src=sctx.getImageData(sx,sy,tw,th),out=new ImageData(new Uint8ClampedArray(src.data),tw,th),sd=src.data,d=out.data;
+    for(let y=1;y<th-1;y++)for(let x=1;x<tw-1;x++){
+      const i=(y*tw+x)*4;if(sd[i+3]===0)continue;const up=i-tw*4,down=i+tw*4,left=i-4,right=i+4;
+      for(let c=0;c<3;c++){const blur=(sd[up+c]+sd[down+c]+sd[left+c]+sd[right+c]+sd[i+c]*4)/8;d[i+c]=clamp(sd[i+c]+(sd[i+c]-blur)*amt);}
     }
+    const cropX=tx-sx,cropY=ty-sy,cropW=Math.min(tile,w-tx),cropH=Math.min(tile,h-ty);
+    ctx.putImageData(out,sx,sy,cropX,cropY,cropW,cropH);
   }
-  ctx.putImageData(out,0,0);return canvas;
+  return canvas;
 }
 
 async function applyFaceEnhance(canvas,job){
-  if(!("FaceDetector" in window)){job.warnings.push("Face Enhance: FaceDetector wird von diesem Browser nicht unterstützt.");return canvas}
+  if(!("FaceDetector" in window)){addWarning(job,"Face Enhance ist in diesem Browser nicht verfügbar; das Bild wurde ohne Gesichtsmanipulation verarbeitet.");return canvas}
   try{
     const detector=new FaceDetector({fastMode:true,maxDetectedFaces:10});
     const faces=await detector.detect(canvas); if(!faces.length) return canvas;
@@ -360,7 +409,7 @@ async function applyFaceEnhance(canvas,job){
       applySharpen(patch,18);base.drawImage(patch,x,y);
     }
     return canvas;
-  }catch(e){job.warnings.push("Face Enhance konnte nicht ausgeführt werden.");return canvas}
+  }catch(e){addWarning(job,"Face Enhance konnte nicht ausgeführt werden; übrige Verarbeitung blieb erhalten.");return canvas}
 }
 
 function removeEdgeBackground(canvas,mode){
@@ -399,7 +448,7 @@ async function upscaleCanvas(canvas,s,job){
     const scale=Math.min(Math.sqrt(state.safeMaxPixels/(canvas.width*canvas.height)),state.safeMaxDimension/canvas.width,state.safeMaxDimension/canvas.height);
     const safe=Math.max(1,Math.floor(scale*100)/100);
     targetW=Math.max(canvas.width,Math.floor(canvas.width*safe));targetH=Math.max(canvas.height,Math.floor(canvas.height*safe));
-    job.warnings.push(`Upscale wegen Browser-Limit auf ${targetW}×${targetH}px begrenzt.`);
+    addWarning(job,`Upscale wurde zum Schutz vor Browser-Absturz auf ${targetW}×${targetH}px begrenzt.`);
   }
   if(targetW<=canvas.width&&targetH<=canvas.height)return canvas;
   let cur=canvas;
@@ -424,23 +473,28 @@ function addHistory(job,s){
   els.historyList.innerHTML=state.history.map(x=>`<span class="history-item">${escapeHtml(x.time)} • ${escapeHtml(x.name)} • ${x.size} • ${escapeHtml(x.mode)}</span>`).join("");
 }
 
-els.resetCurrent.onclick=()=>{const j=currentJob();if(!j)return;j.resultCanvas=null;j.progress=10;j.status="bereit";drawComparison(j);renderJobs();setStatus("Auf Original zurückgesetzt.",0)};
-els.clearJobs.onclick=()=>{state.jobs=[];state.currentId=null;renderJobs();els.canvasScroller.hidden=true;els.compareSlider.disabled=true;els.currentName.textContent="Kein Bild ausgewählt";els.currentMeta.textContent="";els.analysisText.textContent="Noch keine Analyse.";els.printInfo.textContent="—";setStatus("Bereit.",0)};
+els.resetCurrent.onclick=()=>{const j=currentJob();if(!j)return;j.resultCanvas=null;j.progress=10;j.status="bereit";j.warnings=[];drawComparison(j);renderJobs();showWarnings(j);setStatus("Auf Original zurückgesetzt.",0)};
+els.clearJobs.onclick=()=>{state.jobs=[];state.currentId=null;renderJobs();els.canvasScroller.hidden=true;els.compareSlider.disabled=true;els.currentName.textContent="Kein Bild ausgewählt";els.currentMeta.textContent="";els.analysisText.textContent="Noch keine Analyse.";if(els.warningText)els.warningText.textContent="";els.printInfo.textContent="—";setStatus("Bereit.",0)};
 
 els.downloadOriginal.onclick=()=>{
   const j=currentJob();if(!j)return;
   const a=document.createElement("a");a.href=URL.createObjectURL(j.file);a.download=j.file.name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
 };
 
+function opaqueWhiteCanvas(src){
+  const c=document.createElement("canvas");c.width=src.width;c.height=src.height;const x=c.getContext("2d");x.fillStyle="#FFFFFF";x.fillRect(0,0,c.width,c.height);x.drawImage(src,0,0);return c;
+}
 async function canvasToBlob(canvas,format,quality=1){
   if(format==="tiff"){
-    if(!window.UTIF) throw new Error("TIFF-Encoder ist nicht geladen.");
+    if(!window.UTIF) throw new Error("TIFF-Encoder ist nicht geladen. Bitte Internetverbindung/Decoder prüfen oder PNG wählen.");
     const ctx=canvas.getContext("2d",{willReadFrequently:true}),rgba=ctx.getImageData(0,0,canvas.width,canvas.height).data;
     const buf=UTIF.encodeImage(rgba,canvas.width,canvas.height);return new Blob([buf],{type:"image/tiff"});
   }
   const mime={png:"image/png",jpeg:"image/jpeg",webp:"image/webp",avif:"image/avif"}[format]||"image/png";
-  const blob=await new Promise(res=>canvas.toBlob(res,mime,quality));
+  const source=format==="jpeg"?opaqueWhiteCanvas(canvas):canvas;
+  const blob=await new Promise(res=>source.toBlob(res,mime,quality));
   if(!blob) throw new Error(`${format.toUpperCase()}-Export wird von diesem Browser nicht unterstützt.`);
+  if(blob.type!==mime) throw new Error(`${format.toUpperCase()} wird von diesem Browser nicht korrekt encodiert (Browser lieferte ${blob.type||"unbekannt"}). Bitte PNG/TIFF wählen.`);
   return blob;
 }
 function extensionFor(format){return ({jpeg:"jpg",tiff:"tiff",png:"png",webp:"webp",avif:"avif"})[format]||format}
@@ -455,7 +509,7 @@ function downloadBlob(blob,name){const a=document.createElement("a");a.href=URL.
 els.exportFormat.onchange=()=>{
   const f=els.exportFormat.value;
   els.exportNotice.textContent = f==="webp" ? "Hinweis: Canvas-WebP ist je nach Browser trotz Qualität 100 nicht garantiert mathematisch lossless. PNG/TIFF sind die sicheren verlustfreien Optionen." :
-  f==="avif" ? "AVIF-Export ist browserabhängig; bei fehlendem Encoder zeigt die App einen Fehler statt still auf ein anderes Format auszuweichen." : "";
+  f==="avif" ? "AVIF-Export ist browserabhängig; der tatsächliche Codec wird geprüft." : f==="jpeg" ? "JPG hat keine Transparenz; transparente Bereiche werden auf reines Weiß gesetzt." : f==="png" ? "PNG ist die sicherste verlustfreie Browser-Ausgabe mit Alpha-Erhalt." : f==="tiff" ? "TIFF wird verlustfrei über UTIF erzeugt; sehr große Dateien benötigen viel Arbeitsspeicher." : "";
 };
 els.exportCurrent.onclick=async()=>{
   const j=currentJob();if(!j)return;
@@ -471,5 +525,5 @@ els.exportZip.onclick=async()=>{
 };
 
 // Doppelklick auf Job verarbeitet ihn direkt.
-els.jobList.addEventListener("dblclick",e=>{const item=e.target.closest(".job-item");if(item)processCurrent()});
+els.jobList.addEventListener("dblclick",async e=>{const item=e.target.closest(".job-item");if(item){await selectJob(item.dataset.id);processCurrent();}});
 })();

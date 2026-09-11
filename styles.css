@@ -58,3 +58,5 @@ select,input[type=number]{width:100%;background:#0e1217;color:#fff;border:1px so
 .big-icon{font-size:48px;opacity:.5}
 @media(max-width:1150px){.workspace{grid-template-columns:220px 1fr}.controls-panel{grid-column:1/-1;position:static;max-height:none;display:grid;grid-template-columns:repeat(3,1fr);gap:14px}.controls-panel>.preset-grid,.controls-panel>.analysis-card,.controls-panel>.print-card,.controls-panel>.wide{grid-column:1/-1}.controls-panel>.wide{width:auto}.export-panel{align-items:flex-start;flex-direction:column}.export-controls{width:100%}}
 @media(max-width:760px){.topbar{align-items:flex-start;flex-direction:column}.privacy-badge{white-space:normal}.workspace{grid-template-columns:1fr}.jobs-panel,.controls-panel{position:static;max-height:none}.jobs-panel{order:2}.preview-panel{order:1}.controls-panel{order:3;display:block}.compare-stage{min-height:380px}.export-controls{display:grid;grid-template-columns:1fr 1fr}.export-controls label{min-width:0}.export-controls button{width:100%}.export-panel{padding:14px}}
+
+.warning-text{margin-top:8px;color:var(--warn);font-size:11px;white-space:pre-line}.job-item .warn{color:var(--warn)}

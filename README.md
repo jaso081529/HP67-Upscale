@@ -155,3 +155,19 @@ hoodplaka-image-enhancer/
 ## Wichtige Qualitätsentscheidung
 
 Die App erfindet standardmäßig **keine neuen Gesichter, Buchstaben oder Motivdetails**. Ziel ist „treu + scharf + farblich sauber“, nicht generatives Halluzinieren.
+
+## GitHub Actions / Pages
+
+Der Workflow **HP67 Upscale - Test & Deploy** prüft bei jedem Push auf `main` automatisch JavaScript-Syntax, HTML/CSS/JS-Verknüpfung und einen statischen Server-Smoke-Test. Zusätzlich wird immer ein herunterladbares Website-Artefakt `HP67-Upscale-Website` erzeugt.
+
+Wenn GitHub Pages im Repository unter **Settings → Pages → Source: GitHub Actions** aktiviert ist, wird dieselbe geprüfte Version anschließend automatisch veröffentlicht. Ist Pages noch nicht aktiviert, bleibt der Workflow trotzdem erfolgreich und erklärt den fehlenden einmaligen Repository-Schalter in der Job-Zusammenfassung.
+
+### Qualitätskorrekturen der aktuellen Version
+
+- Die Modi Foto / Produkt / KI / Portrait / Grafik beeinflussen die Verarbeitung tatsächlich.
+- `Nur Upscale` verändert weder Farbe noch Schärfe.
+- Batch verarbeitet alle geladenen Bilder nacheinander.
+- Analyse und Schärfung arbeiten speicherschonender, um große Bilder stabiler zu behandeln.
+- Export prüft den echten Browser-Codec; falsche AVIF/WebP-Endungen werden verhindert.
+- JPG füllt Transparenz bewusst mit reinem Weiß.
+- Browser-Warnungen (z. B. FaceDetector nicht verfügbar) werden sichtbar angezeigt.
