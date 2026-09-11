@@ -38,10 +38,59 @@ jobs:
           curl --fail --silent --show-error http://127.0.0.1:8080/app.js >/dev/null
           curl --fail --silent --show-error http://127.0.0.1:8080/styles.css >/dev/null
 
-  build:
-    name: Build Pages artifact
+  package:
+    name: Build downloadable website
     if: github.event_name != 'pull_request'
     needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+      - name: Prepare website package
+        run: |
+          mkdir -p hp67-upscale-site
+          cp index.html app.js styles.css README.md hp67-upscale-site/
+          touch hp67-upscale-site/.nojekyll
+      - name: Upload website artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: HP67-Upscale-Website
+          path: hp67-upscale-site
+          retention-days: 30
+
+  pages_status:
+    name: Check GitHub Pages
+    if: github.event_name != 'pull_request'
+    needs: validate
+    runs-on: ubuntu-latest
+    outputs:
+      enabled: ${{ steps.check.outputs.enabled }}
+    steps:
+      - name: Detect whether Pages is enabled
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          STATUS=$(curl --silent --show-error \
+            --output /tmp/pages.json \
+            --write-out "%{http_code}" \
+            --header "Accept: application/vnd.github+json" \
+            --header "Authorization: Bearer $GH_TOKEN" \
+            --header "X-GitHub-Api-Version: 2022-11-28" \
+            "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/pages")
+          if [ "$STATUS" = "200" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+            echo "GitHub Pages is enabled. Live deployment will run."
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "GitHub Pages is not enabled yet (HTTP $STATUS)."
+            echo "The app is valid and the downloadable website artifact will still be produced."
+          fi
+
+  build_pages:
+    name: Build Pages artifact
+    if: github.event_name != 'pull_request' && needs.pages_status.outputs.enabled == 'true'
+    needs: [validate, pages_status]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -60,8 +109,8 @@ jobs:
 
   deploy:
     name: Deploy GitHub Pages
-    if: github.event_name != 'pull_request'
-    needs: build
+    if: github.event_name != 'pull_request' && needs.pages_status.outputs.enabled == 'true'
+    needs: [pages_status, build_pages]
     runs-on: ubuntu-latest
     environment:
       name: github-pages
