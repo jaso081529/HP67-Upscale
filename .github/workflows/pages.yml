@@ -1,0 +1,72 @@
+name: HP67 Upscale - Test & Deploy
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+  actions: read
+
+concurrency:
+  group: hp67-pages
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Validate app
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+      - name: Check JavaScript syntax
+        run: node --check app.js
+      - name: Validate HTML/CSS/JS wiring
+        run: python3 scripts/validate.py
+      - name: Static server smoke test
+        run: |
+          python3 -m http.server 8080 >/tmp/hp67-http.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill $SERVER_PID' EXIT
+          sleep 1
+          curl --fail --silent --show-error http://127.0.0.1:8080/index.html >/dev/null
+          curl --fail --silent --show-error http://127.0.0.1:8080/app.js >/dev/null
+          curl --fail --silent --show-error http://127.0.0.1:8080/styles.css >/dev/null
+
+  build:
+    name: Build Pages artifact
+    if: github.event_name != 'pull_request'
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v6
+      - name: Prepare static site
+        run: |
+          mkdir -p _site
+          cp index.html app.js styles.css _site/
+          touch _site/.nojekyll
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: _site
+
+  deploy:
+    name: Deploy GitHub Pages
+    if: github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5
