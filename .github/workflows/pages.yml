@@ -23,11 +23,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@v7.0.1
       - name: Check JavaScript syntax
         run: node --check app.js
       - name: Validate HTML/CSS/JS wiring
         run: python3 scripts/validate.py
+      - name: Verify pinned browser dependencies
+        run: |
+          grep -q 'jszip@3.10.2' index.html
+          grep -q 'heic2any@0.0.4' index.html
+          grep -q 'utif@3.1.0' index.html
+          grep -q 'unpkg.com/jszip@3.10.2' index.html
       - name: Static server smoke test
         run: |
           python3 -m http.server 8080 >/tmp/hp67-http.log 2>&1 &
@@ -45,14 +51,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@v7.0.1
       - name: Prepare website package
         run: |
           mkdir -p hp67-upscale-site
           cp index.html app.js styles.css README.md hp67-upscale-site/
           touch hp67-upscale-site/.nojekyll
       - name: Upload website artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.1
         with:
           name: HP67-Upscale-Website
           path: hp67-upscale-site
@@ -94,16 +100,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@v7.0.1
       - name: Configure GitHub Pages
-        uses: actions/configure-pages@v6
+        uses: actions/configure-pages@v6.0.0
       - name: Prepare static site
         run: |
           mkdir -p _site
           cp index.html app.js styles.css _site/
           touch _site/.nojekyll
       - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v5
+        uses: actions/upload-pages-artifact@v5.0.0
         with:
           path: _site
 
@@ -118,4 +124,4 @@ jobs:
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v5
+        uses: actions/deploy-pages@v5.0.1
