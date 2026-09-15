@@ -1,4 +1,4 @@
-name: HP67 Upscale - Test & Deploy
+name: HP67 Studio - Test & Deploy
 
 on:
   push:
@@ -15,17 +15,17 @@ permissions:
 
 concurrency:
   group: hp67-pages
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   validate:
-    name: Validate app
+    name: Validate V2 app
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7.0.1
       - name: Check JavaScript syntax
-        run: node --check app.js
+        run: node --check app-v2.js
       - name: Validate HTML/CSS/JS wiring
         run: python3 scripts/validate.py
       - name: Verify pinned browser dependencies
@@ -45,8 +45,10 @@ jobs:
           trap 'kill $SERVER_PID' EXIT
           sleep 1
           curl --fail --silent --show-error http://127.0.0.1:8080/index.html >/dev/null
-          curl --fail --silent --show-error http://127.0.0.1:8080/app.js >/dev/null
+          curl --fail --silent --show-error http://127.0.0.1:8080/app-v2.js >/dev/null
           curl --fail --silent --show-error http://127.0.0.1:8080/styles.css >/dev/null
+          curl --fail --silent --show-error http://127.0.0.1:8080/manifest.webmanifest >/dev/null
+          curl --fail --silent --show-error http://127.0.0.1:8080/sw.js >/dev/null
 
   package:
     name: Build downloadable website
@@ -58,14 +60,14 @@ jobs:
         uses: actions/checkout@v7.0.1
       - name: Prepare website package
         run: |
-          mkdir -p hp67-upscale-site
-          cp index.html app.js styles.css README.md hp67-upscale-site/
-          touch hp67-upscale-site/.nojekyll
+          mkdir -p hp67-studio-site
+          cp index.html app-v2.js styles.css manifest.webmanifest sw.js README.md hp67-studio-site/
+          touch hp67-studio-site/.nojekyll
       - name: Upload website artifact
         uses: actions/upload-artifact@v7.0.1
         with:
-          name: HP67-Upscale-Website
-          path: hp67-upscale-site
+          name: HP67-Image-Studio-V2
+          path: hp67-studio-site
           retention-days: 30
 
   pages_status:
@@ -90,11 +92,9 @@ jobs:
             "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/pages")
           if [ "$STATUS" = "200" ]; then
             echo "enabled=true" >> "$GITHUB_OUTPUT"
-            echo "GitHub Pages is enabled. Live deployment will run."
           else
             echo "enabled=false" >> "$GITHUB_OUTPUT"
-            echo "GitHub Pages is not enabled yet (HTTP $STATUS)."
-            echo "The app is valid and the downloadable website artifact will still be produced."
+            echo "Pages is not enabled (HTTP $STATUS). Validation/package still succeed."
           fi
 
   build_pages:
@@ -110,7 +110,7 @@ jobs:
       - name: Prepare static site
         run: |
           mkdir -p _site
-          cp index.html app.js styles.css _site/
+          cp index.html app-v2.js styles.css manifest.webmanifest sw.js _site/
           touch _site/.nojekyll
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v5.0.0
