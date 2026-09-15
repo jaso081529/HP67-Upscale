@@ -1,0 +1,9 @@
+{
+  "name": "HoodPlaka67 Image Studio",
+  "short_name": "HP67 Studio",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#090b0e",
+  "theme_color": "#0b0d10",
+  "description": "Lokales Bildstudio für Verbesserung, Retusche, Upscaling und Druckvorbereitung."
+}

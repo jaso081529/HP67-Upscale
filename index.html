@@ -4,219 +4,207 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <meta name="color-scheme" content="dark" />
-  <title>HoodPlaka67 Image Enhancer</title>
+  <meta name="theme-color" content="#0b0d10" />
+  <meta name="description" content="HoodPlaka67 Image Studio – lokale Bildverbesserung, Retusche, Upscaling und Druckvorbereitung im Browser." />
+  <title>HoodPlaka67 Image Studio</title>
+  <link rel="manifest" href="manifest.webmanifest" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <header class="topbar">
-    <div>
-      <div class="eyebrow">HoodPlaka67 • Local Image Lab</div>
-      <h1>Image Enhancer</h1>
-      <p>Weiß korrigieren · Farben aufwerten · schärfen · hochskalieren · lokal exportieren</p>
-    </div>
-    <div class="privacy-badge">🔒 Dateien bleiben lokal im Browser</div>
-  </header>
+<header class="topbar">
+  <div>
+    <div class="eyebrow">HoodPlaka67 • Local Image Studio V2</div>
+    <h1>Image Studio</h1>
+    <p>Verbessern · Retuschieren · Freistellen · skalieren · Druck vorbereiten · Batch exportieren</p>
+  </div>
+  <div class="top-actions">
+    <button id="undoBtn" class="ghost" title="Strg/Cmd+Z" disabled>↶ Undo</button>
+    <button id="redoBtn" class="ghost" title="Strg/Cmd+Y" disabled>↷ Redo</button>
+    <div class="privacy-badge">🔒 Bilddaten bleiben lokal im Browser</div>
+  </div>
+</header>
 
-  <main class="app-shell">
-    <section class="panel upload-panel">
-      <div id="dropzone" class="dropzone" tabindex="0">
-        <input id="fileInput" type="file" multiple hidden
-          accept=".jpg,.jpeg,.png,.webp,.avif,.gif,.bmp,.tif,.tiff,.heic,.heif,.svg,.ico,image/*" />
-        <div class="drop-icon">＋</div>
-        <h2>Bilder hier ablegen</h2>
-        <p>oder Dateien auswählen • Mehrfach-Upload möglich</p>
-        <button id="pickFiles" class="primary">Dateien auswählen</button>
-        <small>JPG · PNG · WebP · AVIF · GIF · BMP · TIFF · HEIC/HEIF · SVG · ICO</small>
+<main class="app-shell">
+  <section class="panel upload-panel">
+    <div id="dropzone" class="dropzone" tabindex="0" role="button" aria-label="Bilder auswählen oder hier ablegen">
+      <input id="fileInput" type="file" multiple hidden accept=".jpg,.jpeg,.png,.webp,.avif,.gif,.bmp,.tif,.tiff,.heic,.heif,.svg,.ico,image/*" />
+      <div class="drop-icon">＋</div>
+      <div><h2>Bilder laden</h2><p>Drag & Drop oder mehrere Dateien auswählen</p></div>
+      <button id="pickFiles" class="primary">Dateien auswählen</button>
+      <small>JPG · PNG · WebP · AVIF · GIF · BMP · TIFF · HEIC/HEIF · SVG · ICO</small>
+    </div>
+    <div id="compatInfo" class="compat-info"></div>
+  </section>
+
+  <section class="workspace">
+    <aside class="panel jobs-panel">
+      <div class="section-title"><h2>Jobs</h2><button id="clearJobs" class="ghost small">Leeren</button></div>
+      <div id="jobList" class="job-list"><div class="empty-state">Noch keine Bilder geladen.</div></div>
+    </aside>
+
+    <section class="panel preview-panel">
+      <div class="preview-toolbar">
+        <div><strong id="currentName">Kein Bild ausgewählt</strong><span id="currentMeta"></span></div>
+        <div class="toolbar-actions">
+          <button class="ghost zoom-btn active" data-zoom="fit">Fit</button>
+          <button class="ghost zoom-btn" data-zoom="1">100%</button>
+          <button class="ghost zoom-btn" data-zoom="2">200%</button>
+        </div>
       </div>
-      <div id="compatInfo" class="compat-info"></div>
+      <div id="compareStage" class="compare-stage empty">
+        <div class="empty-preview"><div class="big-icon">◐</div><p>Original und Ergebnis erscheinen hier.</p></div>
+        <div id="canvasScroller" class="canvas-scroller" hidden>
+          <div id="compareWrap" class="compare-wrap">
+            <canvas id="beforeCanvas"></canvas>
+            <div id="afterClip" class="after-clip"><canvas id="afterCanvas"></canvas></div>
+            <div id="divider" class="divider"></div>
+          </div>
+        </div>
+      </div>
+      <input id="compareSlider" class="compare-slider" type="range" min="0" max="100" value="50" disabled />
+      <div class="compare-labels"><span>Original</span><span>Ergebnis</span></div>
+      <div class="status-row"><div id="statusText">Bereit.</div><div id="progressBox" class="progress-box"><div id="progressBar"></div></div></div>
+      <canvas id="histogram" class="histogram" width="512" height="90" aria-label="Histogramm"></canvas>
     </section>
 
-    <section class="workspace">
-      <aside class="panel jobs-panel">
-        <div class="section-title">
-          <h2>Jobs</h2>
-          <button id="clearJobs" class="ghost small">Leeren</button>
-        </div>
-        <div id="jobList" class="job-list">
-          <div class="empty-state">Noch keine Bilder geladen.</div>
-        </div>
-      </aside>
+    <aside class="panel controls-panel">
+      <div class="tabbar" role="tablist">
+        <button class="tab active" data-tab="auto">Auto</button>
+        <button class="tab" data-tab="tone">Licht/Farbe</button>
+        <button class="tab" data-tab="detail">Detail</button>
+        <button class="tab" data-tab="geometry">Geometrie</button>
+        <button class="tab" data-tab="retouch">Retusche</button>
+        <button class="tab" data-tab="design">Design</button>
+        <button class="tab" data-tab="print">Print</button>
+      </div>
 
-      <section class="panel preview-panel">
-        <div class="preview-toolbar">
-          <div>
-            <strong id="currentName">Kein Bild ausgewählt</strong>
-            <span id="currentMeta"></span>
-          </div>
-          <div class="toolbar-actions">
-            <button class="ghost zoom-btn active" data-zoom="fit">Fit</button>
-            <button class="ghost zoom-btn" data-zoom="1">100%</button>
-            <button class="ghost zoom-btn" data-zoom="2">200%</button>
-          </div>
-        </div>
-
-        <div id="compareStage" class="compare-stage empty">
-          <div class="empty-preview">
-            <div class="big-icon">◐</div>
-            <p>Original und Ergebnis erscheinen hier.</p>
-          </div>
-          <div id="canvasScroller" class="canvas-scroller" hidden>
-            <div id="compareWrap" class="compare-wrap">
-              <canvas id="beforeCanvas"></canvas>
-              <div id="afterClip" class="after-clip">
-                <canvas id="afterCanvas"></canvas>
-              </div>
-              <div id="divider" class="divider"></div>
-            </div>
-          </div>
-        </div>
-        <input id="compareSlider" class="compare-slider" type="range" min="0" max="100" value="50" disabled />
-        <div class="compare-labels"><span>Original</span><span>Ergebnis</span></div>
-
-        <div class="status-row">
-          <div id="statusText">Bereit.</div>
-          <div id="progressBox" class="progress-box">
-            <div id="progressBar"></div>
-          </div>
-        </div>
-      </section>
-
-      <aside class="panel controls-panel">
+      <div class="tabpane active" data-pane="auto">
         <div class="preset-grid">
           <button class="preset active" data-preset="customer">Auto Kundenfertig</button>
+          <button class="preset" data-preset="product">Produkt Clean</button>
+          <button class="preset" data-preset="portrait">Portrait</button>
+          <button class="preset" data-preset="graphic">Grafik/Text</button>
           <button class="preset" data-preset="print">Print 300 DPI</button>
           <button class="preset" data-preset="web">Web</button>
-          <button class="preset" data-preset="social">Social</button>
-          <button class="preset" data-preset="colors">Nur Farben</button>
+          <button class="preset" data-preset="bw">S/W Clean</button>
           <button class="preset" data-preset="upscale">Nur Upscale</button>
-          <button class="preset" data-preset="white">Nur Weiß/Farbstich</button>
         </div>
-
-        <label>Modus
-          <select id="mode">
-            <option value="photo">Foto naturgetreu</option>
-            <option value="product">Produktfoto</option>
-            <option value="ai" selected>KI-Bild</option>
-            <option value="portrait">Portrait</option>
-            <option value="graphic">Grafik + Text</option>
-          </select>
-        </label>
-
-        <div class="control-group">
-          <h3>Farbe & Weiß</h3>
-          <label>Weißpunkt / Beige-Korrektur <output id="whiteStrengthOut">78</output>
-            <input id="whiteStrength" type="range" min="0" max="100" value="78" />
-          </label>
-          <label>Vibrance <output id="vibranceOut">24</output>
-            <input id="vibrance" type="range" min="-50" max="70" value="24" />
-          </label>
-          <label>Sättigung <output id="saturationOut">6</output>
-            <input id="saturation" type="range" min="-50" max="50" value="6" />
-          </label>
-          <label>Kontrast <output id="contrastOut">12</output>
-            <input id="contrast" type="range" min="-50" max="50" value="12" />
-          </label>
-          <label>Highlights <output id="highlightsOut">-4</output>
-            <input id="highlights" type="range" min="-50" max="50" value="-4" />
-          </label>
-          <label>Shadows <output id="shadowsOut">5</output>
-            <input id="shadows" type="range" min="-50" max="50" value="5" />
-          </label>
-          <label>Warm ↔ Kalt <output id="temperatureOut">-3</output>
-            <input id="temperature" type="range" min="-50" max="50" value="-3" />
-          </label>
+        <label>Modus<select id="mode"><option value="photo">Foto naturgetreu</option><option value="product">Produktfoto</option><option value="ai" selected>KI-/Grafikbild</option><option value="portrait">Portrait</option><option value="graphic">Grafik + Text</option></select></label>
+        <div class="button-stack">
+          <button id="runAuto" class="primary wide">✨ Aktuelle Einstellungen anwenden</button>
+          <button id="runBatch" class="primary wide">⚡ Alle Bilder verarbeiten</button>
+          <button id="resetCurrent" class="ghost wide">Auf Original zurücksetzen</button>
         </div>
-
-        <div class="control-group">
-          <h3>Detail</h3>
-          <label>Denoise <output id="denoiseOut">10</output>
-            <input id="denoise" type="range" min="0" max="60" value="10" />
-          </label>
-          <label>Schärfe <output id="sharpenOut">32</output>
-            <input id="sharpen" type="range" min="0" max="100" value="32" />
-          </label>
-          <label>Upscale
-            <select id="upscale">
-              <option value="1">1× Original</option>
-              <option value="2" selected>2×</option>
-              <option value="4">4×</option>
-              <option value="8">8×</option>
-            </select>
-          </label>
-          <label>Custom Zielbreite (px)
-            <input id="customWidth" type="number" min="0" step="1" value="0" />
-          </label>
-        </div>
-
-        <div class="control-group">
-          <h3>Module</h3>
-          <label class="switch-row"><span>Face Enhance</span><input id="faceEnhance" type="checkbox" /></label>
-          <label class="switch-row"><span>Hintergrund entfernen</span><input id="removeBg" type="checkbox" /></label>
-          <label id="bgModeRow">Hintergrund danach
-            <select id="bgMode">
-              <option value="transparent">Transparent</option>
-              <option value="white">Reines Weiß #FFFFFF</option>
-            </select>
-          </label>
-        </div>
-
-        <button id="runAuto" class="primary wide">✨ Aktuelle Einstellungen anwenden</button>
-        <button id="runBatch" class="primary wide">⚡ Alle Bilder automatisch verarbeiten</button>
-        <button id="resetCurrent" class="ghost wide">Auf Original zurücksetzen</button>
-
-        <div class="analysis-card">
-          <h3>Analyse</h3>
-          <div id="analysisText">Noch keine Analyse.</div>
-          <div id="warningText" class="warning-text"></div>
-        </div>
-
-        <div class="print-card">
-          <h3>Print 300 DPI</h3>
-          <div id="printInfo">—</div>
-        </div>
-      </aside>
-    </section>
-
-    <section class="panel export-panel">
-      <div>
-        <h2>Export</h2>
-        <p>Original bleibt separat erhalten. Transparenz wird bei passenden Formaten beibehalten.</p>
+        <div class="analysis-card"><h3>Analyse</h3><div id="analysisText">Noch keine Analyse.</div><div id="warningText" class="warning-text"></div></div>
       </div>
-      <div class="export-controls">
-        <label>Format
-          <select id="exportFormat">
-            <option value="png">PNG • verlustfrei</option>
-            <option value="tiff">TIFF • verlustfrei</option>
-            <option value="webp">WebP • Browser-Maxqualität</option>
-            <option value="jpeg">JPG • einstellbar</option>
-            <option value="avif">AVIF • wenn Browser unterstützt</option>
-          </select>
-        </label>
-        <label>JPG/WebP/AVIF Qualität
-          <input id="exportQuality" type="range" min="70" max="100" value="100" />
-        </label>
-        <button id="downloadOriginal" class="ghost">Original herunterladen</button>
-        <button id="exportCurrent" class="primary">Ergebnis exportieren</button>
-        <button id="exportZip" class="primary">Batch als ZIP</button>
+
+      <div class="tabpane" data-pane="tone">
+        <div class="control-group"><h3>Tonwerte</h3>
+          <label>Belichtung <output id="exposureOut">0</output><input id="exposure" type="range" min="-3" max="3" step="0.1" value="0"></label>
+          <label>Helligkeit <output id="brightnessOut">0</output><input id="brightness" type="range" min="-100" max="100" value="0"></label>
+          <label>Kontrast <output id="contrastOut">10</output><input id="contrast" type="range" min="-100" max="100" value="10"></label>
+          <label>Lichter <output id="highlightsOut">-4</output><input id="highlights" type="range" min="-100" max="100" value="-4"></label>
+          <label>Tiefen <output id="shadowsOut">5</output><input id="shadows" type="range" min="-100" max="100" value="5"></label>
+          <label>Weiß <output id="whitesOut">0</output><input id="whites" type="range" min="-100" max="100" value="0"></label>
+          <label>Schwarz <output id="blacksOut">0</output><input id="blacks" type="range" min="-100" max="100" value="0"></label>
+          <label>Gamma <output id="gammaOut">1.00</output><input id="gamma" type="range" min="0.35" max="2.5" step="0.05" value="1"></label>
+        </div>
+        <div class="control-group"><h3>Farbe</h3>
+          <label>Weißpunkt/Beige <output id="whiteStrengthOut">78</output><input id="whiteStrength" type="range" min="0" max="100" value="78"></label>
+          <label>Temperatur <output id="temperatureOut">-3</output><input id="temperature" type="range" min="-100" max="100" value="-3"></label>
+          <label>Tönung Grün↔Magenta <output id="tintOut">0</output><input id="tint" type="range" min="-100" max="100" value="0"></label>
+          <label>Farbton <output id="hueOut">0°</output><input id="hue" type="range" min="-180" max="180" value="0"></label>
+          <label>Vibrance <output id="vibranceOut">24</output><input id="vibrance" type="range" min="-100" max="100" value="24"></label>
+          <label>Sättigung <output id="saturationOut">6</output><input id="saturation" type="range" min="-100" max="100" value="6"></label>
+        </div>
       </div>
-      <div id="exportNotice" class="notice"></div>
-    </section>
 
-    <section class="panel history-panel">
-      <div class="section-title"><h2>Session-Verlauf</h2></div>
-      <div id="historyList" class="history-list"><span>Noch keine Verarbeitung.</span></div>
-    </section>
-  </main>
+      <div class="tabpane" data-pane="detail">
+        <div class="control-group"><h3>Detail & Atmosphäre</h3>
+          <label>Denoise <output id="denoiseOut">10</output><input id="denoise" type="range" min="0" max="100" value="10"></label>
+          <label>Schärfe <output id="sharpenOut">32</output><input id="sharpen" type="range" min="0" max="100" value="32"></label>
+          <label>Klarheit <output id="clarityOut">0</output><input id="clarity" type="range" min="-100" max="100" value="0"></label>
+          <label>Dehaze <output id="dehazeOut">0</output><input id="dehaze" type="range" min="-100" max="100" value="0"></label>
+          <label>Weichzeichnen <output id="blurOut">0</output><input id="blur" type="range" min="0" max="20" step="0.5" value="0"></label>
+          <label>Vignette <output id="vignetteOut">0</output><input id="vignette" type="range" min="-100" max="100" value="0"></label>
+          <label>Korn <output id="grainOut">0</output><input id="grain" type="range" min="0" max="60" value="0"></label>
+          <label>Pixelate <output id="pixelateOut">0</output><input id="pixelate" type="range" min="0" max="50" value="0"></label>
+        </div>
+        <div class="control-group"><h3>Upscale</h3>
+          <label>Faktor<select id="upscale"><option value="1">1× Original</option><option value="2" selected>2×</option><option value="4">4×</option><option value="8">8×</option></select></label>
+          <label>Custom Zielbreite (px)<input id="customWidth" type="number" min="0" step="1" value="0"></label>
+          <label class="switch-row"><span>Face Enhance (wenn Browser unterstützt)</span><input id="faceEnhance" type="checkbox"></label>
+          <label class="switch-row"><span>Text/Kanten schützen</span><input id="preserveText" type="checkbox" checked></label>
+        </div>
+      </div>
 
-  <!-- Lokale Bildverarbeitung. Externe Bibliotheken werden versionsfest geladen; bei CDN-Ausfall gibt es jeweils einen zweiten Anbieter. -->
-  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.2/dist/jszip.min.js"></script>
-  <script>window.JSZip || document.write('<script src="https://unpkg.com/jszip@3.10.2/dist/jszip.min.js"><\/script>')</script>
-  <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js"></script>
-  <script>window.heic2any || document.write('<script src="https://unpkg.com/heic2any@0.0.4/dist/heic2any.min.js"><\/script>')</script>
-  <script src="https://cdn.jsdelivr.net/npm/pako@1.0.11/dist/pako.min.js"></script>
-  <script>window.pako || document.write('<script src="https://unpkg.com/pako@1.0.11/dist/pako.min.js"><\/script>')</script>
-  <script src="https://cdn.jsdelivr.net/npm/utif@3.1.0/UTIF.js"></script>
-  <script>window.UTIF || document.write('<script src="https://unpkg.com/utif@3.1.0/UTIF.js"><\/script>')</script>
-  <script src="app.js"></script>
+      <div class="tabpane" data-pane="geometry">
+        <div class="button-grid"><button id="rotateLeft" class="ghost">↶ 90°</button><button id="rotateRight" class="ghost">↷ 90°</button><button id="flipH" class="ghost">↔ Spiegeln</button><button id="flipV" class="ghost">↕ Spiegeln</button></div>
+        <div class="control-group"><h3>Begradigen</h3><label>Winkel °<input id="rotateAngle" type="number" min="-45" max="45" step="0.1" value="0"></label><button id="applyRotate" class="ghost wide">Winkel anwenden</button></div>
+        <div class="control-group"><h3>Zuschneiden</h3>
+          <label>Seitenverhältnis<select id="cropRatio"><option value="free">Frei / Eingabefelder</option><option value="1:1">1:1</option><option value="4:5">4:5</option><option value="3:2">3:2</option><option value="16:9">16:9</option><option value="210:297">A4 Hochkant</option><option value="297:210">A4 Quer</option><option value="148:210">A5 Hochkant</option><option value="105:148">A6 Hochkant</option><option value="74:105">A7 Hochkant</option></select></label>
+          <div class="four-grid"><label>X %<input id="cropX" type="number" min="0" max="99" value="0"></label><label>Y %<input id="cropY" type="number" min="0" max="99" value="0"></label><label>Breite %<input id="cropW" type="number" min="1" max="100" value="100"></label><label>Höhe %<input id="cropH" type="number" min="1" max="100" value="100"></label></div>
+          <button id="applyCrop" class="ghost wide">Crop anwenden</button>
+        </div>
+        <div class="control-group"><h3>Resize & Canvas</h3>
+          <div class="two-grid"><label>Breite px<input id="resizeW" type="number" min="1"></label><label>Höhe px<input id="resizeH" type="number" min="1"></label></div>
+          <label class="switch-row"><span>Seitenverhältnis sperren</span><input id="lockRatio" type="checkbox" checked></label><button id="applyResize" class="ghost wide">Größe ändern</button>
+          <div class="two-grid"><label>Rand px<input id="paddingPx" type="number" min="0" max="2000" value="0"></label><label>Randfarbe<input id="paddingColor" type="color" value="#ffffff"></label></div><button id="applyPadding" class="ghost wide">Canvas erweitern</button>
+        </div>
+      </div>
+
+      <div class="tabpane" data-pane="retouch">
+        <div class="control-group"><h3>Hintergrund</h3>
+          <label>Toleranz <output id="bgToleranceOut">50</output><input id="bgTolerance" type="range" min="10" max="120" value="50"></label>
+          <div class="two-grid"><label>Ausgabe<select id="bgMode"><option value="transparent">Transparent</option><option value="white">Weiß</option><option value="color">Farbe</option></select></label><label>Farbe<input id="bgColor" type="color" value="#ffffff"></label></div>
+          <button id="removeBgNow" class="ghost wide">Hintergrund entfernen</button><button id="blurBgNow" class="ghost wide">Hintergrund weichzeichnen</button>
+        </div>
+        <div class="control-group"><h3>Pinsel-Retusche</h3>
+          <div class="tool-grid"><button class="tool active" data-tool="none">Aus</button><button class="tool" data-tool="heal">Heal</button><button class="tool" data-tool="clone">Clone</button><button class="tool" data-tool="erase">Radierer</button><button class="tool" data-tool="restore">Original</button></div>
+          <label>Pinselgröße <output id="brushSizeOut">40</output><input id="brushSize" type="range" min="4" max="300" value="40"></label>
+          <label>Härte <output id="brushHardnessOut">75</output><input id="brushHardness" type="range" min="10" max="100" value="75"></label>
+          <p class="hint">Clone: Alt/Option + Klick setzt die Quelle. Heal glättet lokale Flecken. Original-Pinsel stellt Pixel aus dem Ausgangsbild wieder her.</p>
+        </div>
+      </div>
+
+      <div class="tabpane" data-pane="design">
+        <div class="control-group"><h3>Filter</h3><div class="button-grid"><button class="filterBtn ghost" data-filter="none">Neutral</button><button class="filterBtn ghost" data-filter="bw">S/W</button><button class="filterBtn ghost" data-filter="sepia">Sepia</button><button class="filterBtn ghost" data-filter="warm">Warm</button><button class="filterBtn ghost" data-filter="cool">Kühl</button><button class="filterBtn ghost" data-filter="vivid">Vivid</button></div></div>
+        <div class="control-group"><h3>Sticker / Kontur</h3><div class="two-grid"><label>Kontur px<input id="outlinePx" type="number" min="0" max="80" value="8"></label><label>Farbe<input id="outlineColor" type="color" value="#ffffff"></label></div><button id="applyOutline" class="ghost wide">Kontur hinzufügen</button></div>
+        <div class="control-group"><h3>Rahmen</h3><div class="two-grid"><label>Rahmen px<input id="framePx" type="number" min="0" max="500" value="20"></label><label>Farbe<input id="frameColor" type="color" value="#ffffff"></label></div><button id="applyFrame" class="ghost wide">Rahmen hinzufügen</button></div>
+        <div class="control-group"><h3>Text / Wasserzeichen</h3><label>Text<input id="textValue" type="text" placeholder="HoodPlaka67"></label><div class="two-grid"><label>Größe<input id="textSize" type="number" min="8" max="600" value="64"></label><label>Farbe<input id="textColor" type="color" value="#ffffff"></label></div><label>Position<select id="textPosition"><option value="center">Mitte</option><option value="top">Oben</option><option value="bottom">Unten</option><option value="tl">Oben links</option><option value="br">Unten rechts</option></select></label><button id="addText" class="ghost wide">Text einbrennen</button></div>
+      </div>
+
+      <div class="tabpane" data-pane="print">
+        <div class="print-card"><h3>Print 300 DPI</h3><div id="printInfo">—</div></div>
+        <div class="control-group"><h3>Zielgröße</h3><div class="two-grid"><label>Breite cm<input id="printCmW" type="number" min="0.1" step="0.1" value="21"></label><label>Höhe cm<input id="printCmH" type="number" min="0.1" step="0.1" value="29.7"></label></div><label>DPI<input id="printDpi" type="number" min="72" max="1200" step="1" value="300"></label><button id="applyPrintSize" class="ghost wide">Auf Druckpixel skalieren</button></div>
+        <div class="control-group"><h3>Format-Schnellwahl</h3><div class="button-grid"><button class="printPreset ghost" data-cm="29.7,42">A3</button><button class="printPreset ghost" data-cm="21,29.7">A4</button><button class="printPreset ghost" data-cm="14.8,21">A5</button><button class="printPreset ghost" data-cm="10.5,14.8">A6</button><button class="printPreset ghost" data-cm="7.4,10.5">A7</button><button class="printPreset ghost" data-cm="9.5,9.5">9,5×9,5</button></div></div>
+      </div>
+    </aside>
+  </section>
+
+  <section class="panel export-panel">
+    <div><h2>Export</h2><p>Original bleibt separat. PNG kann 300-DPI-Metadaten erhalten; Pixelmaße bestimmen die tatsächliche Druckschärfe.</p></div>
+    <div class="export-controls">
+      <label>Format<select id="exportFormat"><option value="png">PNG • verlustfrei</option><option value="tiff">TIFF • verlustfrei</option><option value="webp">WebP</option><option value="jpeg">JPG</option><option value="avif">AVIF</option></select></label>
+      <label>Qualität<input id="exportQuality" type="range" min="70" max="100" value="100"></label>
+      <label>Export-DPI<input id="exportDpi" type="number" min="72" max="1200" value="300"></label>
+      <button id="downloadOriginal" class="ghost">Original</button><button id="exportCurrent" class="primary">Ergebnis exportieren</button><button id="exportZip" class="primary">Batch ZIP</button>
+    </div>
+    <div id="exportNotice" class="notice"></div>
+  </section>
+
+  <section class="panel history-panel"><div class="section-title"><h2>Session-Verlauf</h2><button id="saveCustomPreset" class="ghost small">Preset speichern</button><button id="loadCustomPreset" class="ghost small">Preset laden</button></div><div id="historyList" class="history-list"><span>Noch keine Verarbeitung.</span></div></section>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.2/dist/jszip.min.js"></script>
+<script>window.JSZip||document.write('<script src="https://unpkg.com/jszip@3.10.2/dist/jszip.min.js"><\/script>')</script>
+<script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js"></script>
+<script>window.heic2any||document.write('<script src="https://unpkg.com/heic2any@0.0.4/dist/heic2any.min.js"><\/script>')</script>
+<script src="https://cdn.jsdelivr.net/npm/pako@1.0.11/dist/pako.min.js"></script>
+<script>window.pako||document.write('<script src="https://unpkg.com/pako@1.0.11/dist/pako.min.js"><\/script>')</script>
+<script src="https://cdn.jsdelivr.net/npm/utif@3.1.0/UTIF.js"></script>
+<script>window.UTIF||document.write('<script src="https://unpkg.com/utif@3.1.0/UTIF.js"><\/script>')</script>
+<script src="app-v2.js"></script>
+<script>if('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('./sw.js').catch(()=>{});</script>
 </body>
 </html>
